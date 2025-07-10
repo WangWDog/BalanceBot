@@ -9,6 +9,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE ${APP_SOURCES})
 # 添加 App 子目录的头文件路径
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/motor
+        ${CMAKE_CURRENT_SOURCE_DIR}/control_state
         ${CMAKE_CURRENT_SOURCE_DIR}/encoder
         ${CMAKE_CURRENT_SOURCE_DIR}/pid
         ${CMAKE_CURRENT_SOURCE_DIR}/mpu6050

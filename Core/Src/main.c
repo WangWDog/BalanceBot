@@ -27,7 +27,13 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "ir_tracking.h"
+#include "mode.h"
+#include "motor.h"
+#include "uart_bt.h"
+#include "encoder.h"
+#include "balance_ctrl.h"
+#include "control_state.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -100,13 +106,44 @@ int main(void)
   MX_USART2_UART_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);  // 左电机
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);  // 右电机
+  HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL); // 左电机编码器
+  HAL_TIM_Encoder_Start(&htim4, TIM_CHANNEL_ALL); // 右电机编码器
+  HAL_TIM_Base_Start_IT(&htim6);  // 控制循环定时器
 
+  Mode_Init();
+  Motor_Init();
+  Encoder_Init();
+  IR_Tracking_Init();
+  UART_BT_Init();
+  BalanceCtrl_Init();  // 内部初始化 IMU + PID + MPU6050
+  ControlState_Init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    // 蓝牙命令解析（可选处理）
+    BT_Command_t cmd = UART_BT_GetLastCommand();
+    switch (cmd) {
+    case CMD_FORWARD:
+      // 改变目标角度/速度（供 Balance 使用）
+      break;
+    case CMD_BACKWARD:
+      break;
+    case CMD_LEFT:
+      break;
+    case CMD_RIGHT:
+      break;
+    case CMD_STOP:
+      Motor_Stop();  // 可选：将PWM设置为0
+      break;
+    default:
+      break;
+    }
+    UART_BT_ClearCommand();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
