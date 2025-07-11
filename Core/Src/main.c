@@ -34,6 +34,7 @@
 #include "encoder.h"
 #include "balance_ctrl.h"
 #include "control_state.h"
+#include "imu_filter.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -105,20 +106,17 @@ int main(void)
   MX_TIM4_Init();
   MX_USART2_UART_Init();
   MX_TIM6_Init();
+  MX_TIM7_Init();
   /* USER CODE BEGIN 2 */
-  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);  // 左电机
-  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);  // 右电机
-  HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL); // 左电机编码器
-  HAL_TIM_Encoder_Start(&htim4, TIM_CHANNEL_ALL); // 右电机编码器
-  HAL_TIM_Base_Start_IT(&htim6);  // 控制循环定时器
 
-  Mode_Init();
-  Motor_Init();
-  Encoder_Init();
+  IMU_Filter_Init();
+  Encoder_Init(); // 这里面就是处理了编码器的初始化
   IR_Tracking_Init();
   UART_BT_Init();
   BalanceCtrl_Init();  // 内部初始化 IMU + PID + MPU6050
   ControlState_Init();
+  Motor_Init();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -168,9 +166,8 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
@@ -181,7 +178,7 @@ void SystemClock_Config(void)
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSE;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;

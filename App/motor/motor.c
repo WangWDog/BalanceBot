@@ -4,8 +4,12 @@
 
 #include "motor.h"
 
+#include "tim.h"
+
 void Motor_Init(void) {
     // 初始化PWM和方向引脚（TIM已由CubeMX初始化）
+    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);  // 左电机
+    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);  // 右电机
 }
 
 void Motor_SetPWM(int left, int right) {
