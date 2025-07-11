@@ -123,25 +123,39 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    // 蓝牙命令解析（可选处理）
-    BT_Command_t cmd = UART_BT_GetLastCommand();
-    switch (cmd) {
+    BT_Command_t cmd_type = UART_BT_GetLastCommand();
+    BT_ParsedCommand_t cmd = UART_BT_GetParsed();  // 获取上一次解析的完整命令结构体
+
+    switch (cmd_type) {
     case CMD_FORWARD:
-      // 改变目标角度/速度（供 Balance 使用）
+      ControlState_SetTargetAngle(+5.0f);
+      ControlState_SetMotion(MOTION_FORWARD);
       break;
     case CMD_BACKWARD:
+      ControlState_SetTargetAngle(-5.0f);
+      ControlState_SetMotion(MOTION_BACKWARD);
       break;
     case CMD_LEFT:
-      break;
     case CMD_RIGHT:
+      // 已不再使用固定转角，LEFT/RIGHT 转为逻辑提示位（兼容）
+      ControlState_SetMotion(cmd_type == CMD_LEFT ? MOTION_LEFT : MOTION_RIGHT);
+      break;
+    case CMD_YAW:
+      ControlState_AddYawAngleDelta(cmd.param1);  // ✅ 可变角度控制
+      break;
+    case CMD_ANGLE:
+      ControlState_SetTargetAngle(cmd.param1);    // ✅ 设置前后平衡角度
       break;
     case CMD_STOP:
-      Motor_Stop();  // 可选：将PWM设置为0
+      ControlState_SetTargetAngle(0.0f);
+      ControlState_ResetTargetYawAngle();
+      ControlState_SetMotion(MOTION_STOP);
+      Motor_Stop();  // 立即停转
       break;
     default:
       break;
     }
-    UART_BT_ClearCommand();
+  }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

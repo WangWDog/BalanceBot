@@ -14,13 +14,13 @@
 #include "tim.h"
 
 #define PWM_LIMIT       1000
-#define YAW_PWM_LIMIT   400  // 偏航控制最大输出
+#define YAW_PWM_LIMIT   400  // 原地转向最大差速 PWM
 
-static PID_TypeDef pid_angle;
-static PID_TypeDef pid_speed;
-static PID_TypeDef pid_yaw;
+static PID_TypeDef pid_pitch;  // 俯仰角 PID（外环）
+static PID_TypeDef pid_speed;  // 速度 PID（内环）
+static PID_TypeDef pid_yaw;    // 偏航角 PID（转向位置环）
 
-// 判断是否为“原地转向模式”
+// 判断是否是“蓝牙控制原地转向模式”
 static bool IsYawOnlyMode(void) {
     return (ControlState_GetMode() == MODE_BT &&
            (ControlState_GetMotion() == MOTION_LEFT ||
@@ -28,69 +28,64 @@ static bool IsYawOnlyMode(void) {
 }
 
 void BalanceCtrl_Init(void) {
-    HAL_TIM_Base_Start_IT(&htim6);  // 控制循环定时器
-    PID_Init(&pid_angle, 22.0f, 0.6f, 0.8f);    // 外环：角度控制
-    PID_Init(&pid_speed, 1.2f, 0.01f, 0.03f);   // 内环：速度控制
-    PID_Init(&pid_yaw, 5.0f, 0.0f, 0.2f);       // 偏航角速度控制
+    HAL_TIM_Base_Start_IT(&htim6);  // 启动主控循环定时器
+
+    PID_Init(&pid_pitch, 22.0f, 0.6f, 0.8f);
+    PID_Init(&pid_speed, 1.2f, 0.01f, 0.03f);
+    PID_Init(&pid_yaw,   2.5f, 0.02f, 0.1f);  // 控制 Yaw 到达目标角度
 }
 
 void BalanceCtrl_Loop(void) {
-    // 1. 读取 IMU 数据
+    // === 1. 读取 MPU6050 数据 ===
     MPU6050_Read_All(&hi2c1);
 
-    // 2. 提取当前偏航角速度（单位：deg/s）
-    float current_yaw_rate = (float)mpu_data.gz / 131.0f;
+    // === 2. 当前偏航角（Yaw） ===
+    float yaw_angle = IMU_GetYaw();  // 单位：deg
 
-    // ----------------------------
-    // A. 原地转向模式（蓝牙控制转弯）
-    // ----------------------------
+    // === A. 原地转向模式 ===
     if (IsYawOnlyMode()) {
-        float target_yaw_rate = ControlState_GetTargetYawRate();
-        float yaw_pwm = PID_Compute(&pid_yaw, target_yaw_rate, current_yaw_rate);
+        float target_yaw_angle = ControlState_GetTargetYawAngle();
+        float yaw_pwm = PID_Compute(&pid_yaw, target_yaw_angle, yaw_angle);
 
-        // 限幅
         if (yaw_pwm > YAW_PWM_LIMIT) yaw_pwm = YAW_PWM_LIMIT;
         if (yaw_pwm < -YAW_PWM_LIMIT) yaw_pwm = -YAW_PWM_LIMIT;
 
-        // 左右轮反转实现原地旋转
+        // 原地差速输出
         Motor_SetPWM((int)(-yaw_pwm), (int)(yaw_pwm));
         return;
     }
 
-    // ----------------------------
-    // B. 普通平衡控制（直行 / 后退 / 巡线）
-    // ----------------------------
+    // === B. 正常平衡运动 ===
 
-    // 3. 解算当前俯仰角（Pitch）
-    float acc_angle = atan2f((float)mpu_data.ay, (float)mpu_data.az) * 57.3f;
-    float gyro_x = (float)mpu_data.gx / 131.0f;
-    IMU_Filter_Update(acc_angle, gyro_x);
-    float angle = IMU_GetAngle();  // 当前车体倾角
+    // === 3. 当前俯仰角（Pitch）姿态解算 ===
+    float acc_pitch = atan2f((float)mpu_data.ay, (float)mpu_data.az) * 57.3f;
+    float pitch_gyro_rate = (float)mpu_data.gx / 131.0f;  // X轴角速度（deg/s）
+    float gyro_yaw = (float)mpu_data.gz / 131.0f;
+    IMU_Filter_Update(acc_pitch, pitch_gyro_rate, gyro_yaw);
+    float pitch_angle = IMU_GetPitch();  // 当前姿态角，单位 deg
 
-    // 4. 角度环 PID（目标角 → 目标速度）
-    float target_angle = ControlState_GetTargetAngle();
-    float target_speed = PID_Compute(&pid_angle, target_angle, angle);
+    // === 4. 外环：俯仰角 PID → 目标速度 ===
+    float target_pitch_angle = ControlState_GetTargetAngle();
+    float target_speed = PID_Compute(&pid_pitch, target_pitch_angle, pitch_angle);
 
-    // 5. 编码器读取当前速度
+    // === 5. 编码器测量速度 ===
     Encoder_Update();
     float left_speed = (float)Encoder_GetSpeed_Left();
     float right_speed = (float)Encoder_GetSpeed_Right();
-    float speed = (left_speed + right_speed) / 2.0f;
+    float actual_speed = (left_speed + right_speed) / 2.0f;
 
-    // 6. 速度环 PID（目标速度 → PWM）
-    float pwm = PID_Compute(&pid_speed, target_speed, speed);
+    // === 6. 内环：速度 PID → PWM 输出 ===
+    float pwm = PID_Compute(&pid_speed, target_speed, actual_speed);
 
-    // 7. 限制总 PWM
     if (pwm > PWM_LIMIT) pwm = PWM_LIMIT;
     if (pwm < -PWM_LIMIT) pwm = -PWM_LIMIT;
 
-    // 8. 左右轮初始输出
     float left_pwm = pwm;
     float right_pwm = pwm;
 
-    // 9. 根据模式做循迹差速调整（红外循迹 / 自定义）
+    // === 7. 若为循迹或其他模式，应用差速调节 ===
     BalanceCtrl_ApplyTurn(&left_pwm, &right_pwm);
 
-    // 10. 输出到电机
+    // === 8. 输出到电机 ===
     Motor_SetPWM((int)left_pwm, (int)right_pwm);
 }

@@ -1,3 +1,4 @@
+// control_state.h
 #ifndef CONTROL_STATE_H
 #define CONTROL_STATE_H
 
@@ -25,5 +26,10 @@ MotionEnum ControlState_GetMotion(void);
 
 void ControlState_SetTargetAngle(float angle);
 float ControlState_GetTargetAngle(void);
+
+void ControlState_SetTargetYawAngle(float yaw);
+float ControlState_GetTargetYawAngle(void);
+void ControlState_AddYawAngleDelta(float delta);
+void ControlState_ResetTargetYawAngle(void);
 
 #endif

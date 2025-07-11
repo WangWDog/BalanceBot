@@ -18,4 +18,5 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/ir_tracking
         ${CMAKE_CURRENT_SOURCE_DIR}/uart_bt
         ${CMAKE_CURRENT_SOURCE_DIR}/mode_switch
+        ${CMAKE_CURRENT_SOURCE_DIR}/uart_util
 )
